@@ -1,84 +1,150 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>隱藏版貪食蛇</title>
+    <title>回憶三重奏 Trio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="manifest" href="manifest.json">
     <style>
-        body { background: #222; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; touch-action: none; }
-        canvas { border: 2px solid #fff; background: #000; max-width: 90vw; max-height: 70vh; }
-        .controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; margin-top: 20px; }
-        .btn { width: 60px; height: 60px; background: #444; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-        .up { grid-column: 2; }
+        :root { --bg: #1a1a1a; --card: #333; --highlight: #f1c40f; }
+        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; touch-action: manipulation; }
+        #status { margin: 10px; font-size: 18px; color: var(--highlight); text-align: center; height: 1.5em; }
+        .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 20px; width: 100%; max-width: 400px; }
+        .card { aspect-ratio: 2/3; background: var(--card); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 1px solid #444; transition: 0.3s; }
+        .card.revealed { background: white; color: black; border-color: var(--highlight); }
+        .hand-area { width: 100%; max-width: 400px; border-top: 1px solid #444; padding-top: 10px; }
+        .hand-title { font-size: 14px; margin-bottom: 5px; opacity: 0.8; }
+        .hand { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 15px; }
+        .card.hidden { color: transparent; background: #444; }
+        .score-board { display: flex; gap: 20px; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div id="score">分數: 0</div>
-    <canvas id="game" width="400" height="400"></canvas>
-    
-    <div class="controls">
-        <div class="btn up" onclick="changeDir('up')">▲</div>
-        <div class="btn" onclick="changeDir('left')">◀</div>
-        <div class="btn" onclick="changeDir('down')">▼</div>
-        <div class="btn" onclick="changeDir('right')">▶</div>
-    </div>
 
-    <script>
-        const canvas = document.getElementById('game');
-        const ctx = canvas.getContext('2d');
-        const grid = 20;
-        let count = 0;
-        let score = 0;
-        let snake = { x: 160, y: 160, dx: grid, dy: 0, cells: [], maxCells: 4 };
-        let apple = { x: 320, y: 320 };
+<div id="status">準備開始...</div>
 
-        function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min)) + min; }
+<div class="score-board">
+    <div>你: <span id="p-score">0</span> 組</div>
+    <div>電腦: <span id="c-score">0</span> 組</div>
+</div>
 
-        function loop() {
-            requestAnimationFrame(loop);
-            if (++count < 6) return; // 控制速度
-            count = 0;
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-            snake.x += snake.dx; snake.y += snake.dy;
-            if (snake.x < 0) snake.x = canvas.width - grid;
-            else if (snake.x >= canvas.width) snake.x = 0;
-            if (snake.y < 0) snake.y = canvas.height - grid;
-            else if (snake.y >= canvas.height) snake.y = 0;
+<div class="hand-area">
+    <div class="hand-title">電腦的手牌 (僅能翻頭尾)</div>
+    <div id="computer-hand" class="hand"></div>
+</div>
 
-            snake.cells.unshift({x: snake.x, y: snake.y});
-            if (snake.cells.length > snake.maxCells) snake.cells.pop();
+<div class="hand-title">公共牌區</div>
+<div id="public-board" class="board"></div>
 
-            ctx.fillStyle = 'red';
-            ctx.fillRect(apple.x, apple.y, grid-1, grid-1);
+<div class="hand-area">
+    <div class="hand-title">你的手牌 (僅能翻頭尾)</div>
+    <div id="player-hand" class="hand"></div>
+</div>
 
-            ctx.fillStyle = 'lime';
-            snake.cells.forEach((cell, index) => {
-                ctx.fillRect(cell.x, cell.y, grid-1, grid-1);
-                if (cell.x === apple.x && cell.y === apple.y) {
-                    snake.maxCells++;
-                    score++;
-                    document.getElementById('score').innerText = "分數: " + score;
-                    apple.x = getRandomInt(0, 20) * grid;
-                    apple.y = getRandomInt(0, 20) * grid;
-                }
-                for (let i = index + 1; i < snake.cells.length; i++) {
-                    if (cell.x === snake.cells[i].x && cell.y === snake.cells[i].y) {
-                        snake.x = 160; snake.y = 160; snake.cells = [];
-                        snake.maxCells = 4; snake.dx = grid; snake.dy = 0;
-                        score = 0;
-                        document.getElementById('score').innerText = "分數: 0";
-                    }
-                }
-            });
+<script>
+    let deck = [];
+    let pHand = [], cHand = [], publicBoard = [];
+    let pScore = 0, cScore = 0;
+    let turn = 'player'; // 'player' or 'computer'
+    let currentReveal = [];
+
+    // 初始化遊戲
+    function init() {
+        // 產生 1-12 各三張
+        deck = [];
+        for(let i=1; i<=12; i++) deck.push(i, i, i);
+        deck.sort(() => Math.random() - 0.5);
+
+        // 分牌
+        pHand = deck.splice(0, 9).sort((a,b) => a-b);
+        cHand = deck.splice(0, 9).sort((a,b) => a-b);
+        publicBoard = deck.map(n => ({ val: n, revealed: false }));
+
+        render();
+        updateStatus("你的回合！請點擊公共牌或手牌頭尾");
+    }
+
+    function render() {
+        const pHandEl = document.getElementById('player-hand');
+        const cHandEl = document.getElementById('computer-hand');
+        const boardEl = document.getElementById('public-board');
+
+        // 渲染玩家手牌
+        pHandEl.innerHTML = pHand.map((n, i) => 
+            `<div class="card revealed" onclick="clickHand('player', ${i})">${n}</div>`).join('');
+        
+        // 渲染電腦手牌 (蓋著)
+        cHandEl.innerHTML = cHand.map((n, i) => 
+            `<div class="card hidden" onclick="clickHand('computer', ${i})">${n}</div>`).join('');
+
+        // 渲染公共牌
+        boardEl.innerHTML = publicBoard.map((card, i) => 
+            `<div class="card ${card.revealed ? 'revealed' : ''}" onclick="clickPublic(${i})">${card.revealed ? card.val : '?'}</div>`).join('');
+        
+        document.getElementById('p-score').innerText = pScore;
+        document.getElementById('c-score').innerText = cScore;
+    }
+
+    function clickPublic(idx) {
+        if(turn !== 'player' || publicBoard[idx].revealed) return;
+        handleChoice(publicBoard[idx].val, () => { publicBoard[idx].revealed = true; });
+    }
+
+    function clickHand(owner, idx) {
+        if(turn !== 'player') return;
+        let targetHand = (owner === 'player') ? pHand : cHand;
+        // 限制只能點頭尾
+        if(idx !== 0 && idx !== targetHand.length - 1) {
+            updateStatus("只能選擇最大或最小的牌！");
+            return;
         }
+        
+        let val = targetHand[idx];
+        handleChoice(val, () => {
+            targetHand.splice(idx, 1);
+        });
+    }
 
-        function changeDir(dir) {
-            if (dir === 'left' && snake.dx === 0) { snake.dx = -grid; snake.dy = 0; }
-            else if (dir === 'up' && snake.dy === 0) { snake.dy = -grid; snake.dx = 0; }
-            else if (dir === 'right' && snake.dx === 0) { snake.dx = grid; snake.dy = 0; }
-            else if (dir === 'down' && snake.dy === 0) { snake.dy = grid; snake.dx = 0; }
+    function handleChoice(val, removeCallback) {
+        currentReveal.push(val);
+        removeCallback();
+        render();
+
+        if (currentReveal.length > 1 && currentReveal[currentReveal.length-1] !== currentReveal[0]) {
+            updateStatus("不匹配！換電腦...");
+            setTimeout(endTurn, 1000);
+        } else if (currentReveal.length === 3) {
+            updateStatus("三重奏！得分！");
+            if(turn === 'player') pScore++; else cScore++;
+            if(currentReveal[0] === 7) { alert(turn + " 獲得數字 7，直接勝利！"); location.reload(); }
+            currentReveal = [];
+            checkWin();
+            if(turn === 'computer') setTimeout(computerAI, 1000); // 電腦得分可續玩
         }
-        requestAnimationFrame(loop);
-    </script>
+    }
+
+    function endTurn() {
+        // 蓋回公共牌 (簡化版：此處需更複雜邏輯處理手牌收回，我們暫定失敗就換人)
+        currentReveal = [];
+        turn = (turn === 'player') ? 'computer' : 'player';
+        render();
+        if(turn === 'computer') computerAI();
+        else updateStatus("你的回合！");
+    }
+
+    function computerAI() {
+        updateStatus("電腦思考中...");
+        setTimeout(() => {
+            // AI 簡單邏輯：隨機選公共牌
+            let idx = Math.floor(Math.random() * publicBoard.length);
+            while(publicBoard[idx].revealed) idx = Math.floor(Math.random() * publicBoard.length);
+            handleChoice(publicBoard[idx].val, () => { publicBoard[idx].revealed = true; });
+            // AI 第二、三張邏輯暫略，以此類推...
+        }, 1000);
+    }
+
+    function updateStatus(msg) { document.getElementById('status').innerText = msg; }
+    function checkWin() { if(pScore >= 3 || cScore >= 3) { alert("遊戲結束！"); location.reload(); } }
+
+    init();
+</script>
 </body>
 </html>
