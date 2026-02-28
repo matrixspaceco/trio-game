@@ -7,26 +7,24 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; --player-color: #2ecc71; }
-        body { background: var(--bg); color: white; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
-        .status-bar { margin: 15px; font-size: 16px; color: var(--highlight); text-align: center; height: 3.5em; font-weight: bold; line-height: 1.4; }
+        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; }
+        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
+        .status-bar { margin: 15px; font-size: 16px; color: var(--highlight); text-align: center; height: 3.5em; font-weight: bold; }
         .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; width: 100%; max-width: 400px; }
         .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: 0.2s; cursor: pointer; }
         .card.revealed { background: white; color: black; border-color: var(--highlight); transform: scale(1.05); }
         .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; box-sizing: border-box; }
         .hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 50px; }
-        .card.hidden-hand { color: transparent; background: linear-gradient(135deg, #2c3e50 25%, #34495e 100%); }
+        .card.hidden-hand { color: transparent; background: #222; }
         .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; }
         .btn-action { background: var(--highlight); border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; margin: 10px; color: #000; cursor: pointer; }
-        input { padding: 12px; border-radius: 8px; border: none; margin: 5px; width: 80%; max-width: 300px; text-align: center; font-size: 16px; background: #333; color: white; }
-        .active-turn { color: var(--highlight); box-shadow: 0 2px 0 var(--highlight); }
+        input { padding: 12px; border-radius: 8px; border: none; margin: 5px; width: 80%; text-align: center; background: #333; color: white; }
     </style>
 </head>
 <body>
 
 <div id="login-ui">
     <h2 style="color:var(--highlight)">🧩 Trio 回憶三重奏</h2>
-    <p>輸入房間號碼與你的編號開始連線</p>
     <input type="text" id="roomId" placeholder="房號 (例如: 888)">
     <input type="number" id="playerIdx" placeholder="玩家編號 (0, 1, 2)">
     <br>
@@ -35,19 +33,15 @@
 
 <div id="game-ui" style="display:none;">
     <div class="score-board" id="score-el"></div>
-    <div id="status" class="status-bar">連線中...</div>
-    
+    <div id="status" class="status-bar">讀取資料中...</div>
     <div id="others-area"></div>
-    
     <div id="public-board" class="board"></div>
-    
-    <div class="hand-area">
-        <div style="font-size:11px; opacity:0.6; margin-bottom:5px;">你的手牌 (已按大小排序)</div>
-        <div id="my-hand" class="hand"></div>
-    </div>
-    
-    <button id="host-btn" class="btn-action" style="display:none;" onclick="initDeck()">房主洗牌並發牌</button>
+    <div class="hand-area"><div id="my-hand" class="hand"></div></div>
+    <button id="host-btn" class="btn-action" style="display:none;" onclick="initDeck()">房主洗牌發牌</button>
 </div>
+
+<audio id="snd-flip" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
+<audio id="snd-match" src="https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3"></audio>
 
 <script>
     const firebaseConfig = {
@@ -57,26 +51,36 @@
         projectId: "trio-online-game",
         storageBucket: "trio-online-game.firebasestorage.app",
         messagingSenderId: "498938859484",
-        appId: "1:498938859484:web:07f43000a8b46a1f47c919",
-        measurementId: "G-EEHY113ZEV"
+        appId: "1:498938859484:web:07f43000a8b46a1f47c919"
     };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let rId, myIdx, game;
 
+    function playSound(id) {
+        const s = document.getElementById(id);
+        s.currentTime = 0;
+        s.play().catch(()=>{}); // 避免瀏覽器攔截自動播放
+    }
+
     function joinGame() {
         rId = document.getElementById('roomId').value;
         myIdx = parseInt(document.getElementById('playerIdx').value);
-        if (!rId || isNaN(myIdx)) return alert("請填寫房號與玩家編號");
+        if (!rId || isNaN(myIdx)) return alert("請填寫房號與編號");
 
         document.getElementById('login-ui').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
         if (myIdx === 0) document.getElementById('host-btn').style.display = 'block';
 
+        // 這裡確保連線到正確的路徑
         db.ref('trio/' + rId).on('value', (s) => {
             game = s.val();
-            if (game) render();
+            if (game) {
+                render();
+            } else {
+                document.getElementById('status').innerText = "房間建立成功！請房主洗牌";
+            }
         });
     }
 
@@ -95,48 +99,44 @@
             board: cards.map(v => ({v: v, open: false})),
             players: players,
             turn: 0,
-            stack: [], // 記錄目前翻開的數字
+            stack: [],
             count: 3
         });
     }
 
     function render() {
-        // 渲染分數
+        // 更新分數與渲染
         let sHtml = "";
-        for(let i=0; i<game.count; i++) {
-            sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">P${i}: ${game.players[i].score}</div>`;
-        }
+        for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">P${i}: ${game.players[i].score}</div>`;
         document.getElementById('score-el').innerHTML = sHtml;
 
-        // 渲染其他玩家 (隱私：僅能看頭尾)
+        // 公共牌
+        document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
+            `<div class="card ${c.open ? 'revealed' : ''}" onclick="pick('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
+        ).join('');
+
+        // 自己手牌
+        let myHand = game.players[myIdx].hand || [];
+        document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
+            `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
+        ).join('');
+
+        // 對手手牌
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
-            let hand = game.players[i].hand || [];
-            oHtml += `<div class="hand-area"><div style="font-size:10px; opacity:0.6;">玩家 P${i} (點擊頭尾翻牌)</div><div class="hand">`;
-            hand.forEach((v, idx) => {
-                let isEdge = (idx === 0 || idx === hand.length - 1);
+            oHtml += `<div class="hand-area"><div class="hand">`;
+            (game.players[i].hand || []).forEach((v, idx) => {
+                let isEdge = (idx === 0 || idx === (game.players[i].hand.length - 1));
                 oHtml += `<div class="card ${isEdge ? '' : 'hidden-hand'}" onclick="pick('other', ${i}, ${idx})">${isEdge ? '?' : ''}</div>`;
             });
             oHtml += `</div></div>`;
         }
         document.getElementById('others-area').innerHTML = oHtml;
 
-        // 渲染公共牌
-        document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
-            `<div class="card ${c.open ? 'revealed' : ''}" onclick="pick('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
-        ).join('');
-
-        // 渲染自己手牌
-        let myHand = game.players[myIdx].hand || [];
-        document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
-            `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
-        ).join('');
-
-        // 更新狀態文字
         const status = document.getElementById('status');
-        if (game.turn === myIdx) status.innerHTML = "輪到你了！<br>請翻開兩張相同數字";
-        else status.innerHTML = `等待 P${game.turn} 行動...<br>目前翻開: ${game.stack ? game.stack.join(', ') : '無'}`;
+        if (game.turn === myIdx) status.innerHTML = "輪到你了！請翻牌";
+        else status.innerHTML = `等待 P${game.turn} 行動...<br>已翻: ${game.stack ? game.stack.join(', ') : '無'}`;
     }
 
     async function pick(type, targetIdx, cardIdx) {
@@ -144,9 +144,10 @@
         let stack = game.stack || [];
         if (stack.length >= 3) return;
 
+        playSound('snd-flip'); // 翻牌音效
+
         let val;
         let updates = {};
-
         if (type === 'pub') {
             if (game.board[cardIdx].open) return;
             val = game.board[cardIdx].v;
@@ -156,44 +157,36 @@
             updates[`/players/${myIdx}/hand/${cardIdx}`] = null;
         } else if (type === 'other') {
             let hand = game.players[targetIdx].hand;
-            if (cardIdx !== 0 && cardIdx !== hand.length - 1) return alert("只能翻對手最大或最小的牌！");
+            if (cardIdx !== 0 && cardIdx !== hand.length - 1) return;
             val = hand[cardIdx];
             updates[`/players/${targetIdx}/hand/${cardIdx}`] = null;
         }
 
         stack.push(val);
         updates['/stack'] = stack;
-
         await db.ref('trio/' + rId).update(updates);
 
-        // 邏輯判斷
         if (stack.length > 1 && stack[stack.length - 1] !== stack[0]) {
-            setTimeout(resetTurn, 1500);
+            setTimeout(resetTurn, 1200);
         } else if (stack.length === 3) {
+            playSound('snd-match'); // 配對成功音效
             setTimeout(winSet, 1000);
         }
     }
 
     function resetTurn() {
         let updates = { stack: [], turn: (game.turn + 1) % game.count };
-        // 蓋回公共牌
         game.board.forEach((c, i) => { updates[`/board/${i}/open`] = false; });
-        // 手牌收回邏輯 (簡化：此版本不收回，僅從手牌移除，實際建議加上回存)
         db.ref('trio/' + rId).update(updates);
     }
 
     function winSet() {
         let score = game.players[myIdx].score + 1;
-        let updates = { 
+        db.ref('trio/' + rId).update({ 
             stack: [], 
             [`/players/${myIdx}/score`]: score,
             turn: (game.turn + 1) % game.count 
-        };
-        db.ref('trio/' + rId).update(updates);
-        if (game.stack[0] === 7 || score >= 3) {
-            alert(score >= 3 ? "你集齊 3 組三重奏，獲勝！" : "你集齊數字 7，直接勝利！");
-            initDeck();
-        }
+        });
     }
 </script>
 </body>
