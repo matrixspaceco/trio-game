@@ -2,50 +2,43 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>回憶三重奏 Trio - 朋友連線版</title>
+    <title>回憶三重奏 Trio - AI 補位版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; --btn: #f1c40f; }
+        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; }
         body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
-        
-        /* 登入介面優化 */
-        #login-box { background: #222; padding: 30px; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-top: 50px; width: 85%; max-width: 350px; }
-        input { width: 90%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
-        .btn-main { background: var(--btn); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; margin-top: 10px; }
-        
-        /* 遊戲介面 */
-        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; line-height: 1.4; }
+        #login-box { background: #222; padding: 30px; border-radius: 20px; text-align: center; margin-top: 50px; width: 85%; max-width: 350px; }
+        input { width: 90%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; background: #333; color: white; text-align: center; }
+        .btn-main { background: var(--highlight); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; }
+        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 3.5em; line-height: 1.4; }
         .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; width: 100%; max-width: 400px; }
         .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: 0.2s; cursor: pointer; }
         .card.revealed { background: white; color: black; border-color: var(--highlight); transform: scale(1.05); }
         .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; }
         .hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 50px; }
         .card.hidden-hand { color: transparent; background: #222; }
-        .active-turn { color: var(--highlight); text-decoration: underline; font-size: 1.1em; }
         .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; }
+        .active-turn { color: var(--highlight); text-decoration: underline; }
     </style>
 </head>
 <body>
 
 <div id="login-box">
-    <h2 style="color:var(--highlight); margin-bottom:20px;">🧩 Trio 房間邀請</h2>
-    <input type="text" id="userName" placeholder="輸入你的名字">
-    <input type="text" id="roomCode" placeholder="輸入房間代碼 (如: ABC)">
+    <h2 style="color:var(--highlight)">🧩 Trio 房間邀請</h2>
+    <input type="text" id="userName" placeholder="你的名字">
+    <input type="text" id="roomCode" placeholder="房間代碼 (如: ABC)">
     <button class="btn-main" onclick="joinGame()">加入遊戲</button>
 </div>
 
 <div id="game-ui" style="display:none; width: 100%; max-width: 400px;">
     <div class="score-board" id="score-el"></div>
-    <div id="status" class="status-bar">等待連線...</div>
+    <div id="status" class="status-bar">連線中...</div>
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
-    <div class="hand-area">
-        <div style="font-size:12px; opacity:0.6; margin-bottom:5px;">我的手牌</div>
-        <div id="my-hand" class="hand"></div>
-    </div>
-    <button id="host-btn" class="btn-main" style="display:none;" onclick="initDeck()">房主洗牌發牌</button>
+    <div class="hand-area"><div id="my-hand" class="hand"></div></div>
+    <button id="host-btn" class="btn-main" style="display:none;" onclick="initDeck()">補足電腦並發牌</button>
 </div>
 
 <audio id="snd-flip" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
@@ -69,128 +62,136 @@
     async function joinGame() {
         myName = document.getElementById('userName').value.trim();
         rCode = document.getElementById('roomCode').value.trim().toUpperCase();
-        
-        if (!myName || !rCode) return alert("請輸入名字與房間代碼");
+        if (!myName || !rCode) return alert("請輸入名字與代碼");
 
-        // 自動分配編號：檢查房間現有人數
         const snap = await db.ref('trio/' + rCode + '/playerList').get();
         let list = snap.val() || [];
-        
-        // 如果名字已在清單中，直接沿用編號；否則新增
-        let existingIdx = list.indexOf(myName);
-        if (existingIdx !== -1) {
-            myIdx = existingIdx;
-        } else {
-            myIdx = list.length;
-            list.push(myName);
-            await db.ref('trio/' + rCode + '/playerList').set(list);
-        }
+        myIdx = list.indexOf(myName);
+        if (myIdx === -1) { myIdx = list.length; list.push(myName); await db.ref('trio/' + rCode + '/playerList').set(list); }
 
         document.getElementById('login-box').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
-        if (myIdx === 0) document.getElementById('host-btn').style.display = 'block';
 
         db.ref('trio/' + rCode).on('value', (s) => {
             game = s.val();
-            if (game && game.players) render();
-            else document.getElementById('status').innerText = `你好 ${myName}！\n等待房主開局...`;
+            if (game && game.players) {
+                render();
+                document.getElementById('host-btn').style.display = 'none';
+                if (game.players[game.turn].isAI && myIdx === 0) {
+                    setTimeout(aiTurn, 1500);
+                }
+            } else {
+                if (myIdx === 0) document.getElementById('host-btn').style.display = 'block';
+                let currentCount = (game && game.playerList) ? game.playerList.length : 0;
+                document.getElementById('status').innerText = `目前等待中玩家：${currentCount} 人\n人數不足 3 人將自動由電腦補位`;
+            }
         });
     }
 
     function initDeck() {
+        let pList = game.playerList || [];
+        // 如果人數少於 3 人，自動補足
+        while (pList.length < 3) {
+            pList.push("電腦玩家" + pList.length);
+        }
+        let pCount = pList.length;
+
+        const handConfig = { 3: 9, 4: 7, 5: 6, 6: 5 };
+        let handSize = handConfig[pCount];
+
         let cards = [];
         for(let i=1; i<=12; i++) cards.push(i, i, i);
         cards.sort(() => Math.random() - 0.5);
         
-        let pCount = game.playerList.length;
         let players = {};
-        // 根據人數發牌規則
-        let handSize = (pCount === 3) ? 9 : (pCount === 4 ? 7 : 6);
-
         for(let i=0; i<pCount; i++) {
             let hand = cards.splice(0, handSize).sort((a,b) => a-b);
-            players[i] = { hand: hand, score: 0, name: game.playerList[i] };
+            players[i] = { 
+                hand: hand, 
+                score: 0, 
+                name: pList[i],
+                isAI: pList[i].includes("電腦") 
+            };
         }
 
         db.ref('trio/' + rCode).update({
             board: cards.map(v => ({v: v, open: false})),
-            players: players,
-            turn: 0,
-            stack: [],
-            count: pCount
+            players: players, turn: 0, stack: [], count: pCount, playerList: pList
         });
     }
 
     function render() {
-        // 分數與名字
         let sHtml = "";
-        for(let i=0; i<game.count; i++) {
-            let p = game.players[i];
-            sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${p.name}: ${p.score}</div>`;
-        }
+        for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${game.players[i].name}: ${game.players[i].score}</div>`;
         document.getElementById('score-el').innerHTML = sHtml;
 
-        // 公共牌
         document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
             `<div class="card ${c.open ? 'revealed' : ''}" onclick="pick('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
         ).join('');
 
-        // 自己手牌
-        let myHand = game.players[myIdx] ? game.players[myIdx].hand : [];
+        let myHand = (game.players[myIdx] && game.players[myIdx].hand) ? game.players[myIdx].hand : [];
         document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
             v === -1 ? `<div class="card" style="opacity:0"></div>` : `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
         ).join('');
 
-        // 對手手牌 (只看頭尾)
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
             let h = game.players[i].hand || [];
-            oHtml += `<div class="hand-area"><div style="font-size:10px; margin-bottom:5px;">${game.players[i].name} 的手牌</div><div class="hand">`;
+            oHtml += `<div class="hand-area"><div style="font-size:10px; margin-bottom:5px;">${game.players[i].name}</div><div class="hand">`;
             h.forEach((v, idx) => {
                 if (v === -1) { oHtml += `<div class="card" style="opacity:0"></div>`; return; }
-                let first = h.findIndex(x => x !== -1);
-                let last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
+                let first = h.findIndex(x => x !== -1), last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
                 let edge = (idx === first || idx === last);
-                oHtml += `<div class="card ${edge ? '' : 'hidden-hand'}" onclick="pick('other', ${i}, ${idx})">${edge ? '?' : ''}</div>`;
+                oHtml += `<div class="card ${edge ? '' : 'hidden-hand'}" onclick="pick('other', i, idx)">${edge ? '?' : ''}</div>`;
             });
             oHtml += `</div></div>`;
         }
         document.getElementById('others-area').innerHTML = oHtml;
-
-        let activeName = game.players[game.turn].name;
-        document.getElementById('status').innerHTML = (game.turn === myIdx) ? "換你出牌了！" : `等待 ${activeName} 行動...`;
+        document.getElementById('status').innerHTML = (game.turn === myIdx) ? "換你出牌了！" : `等待 ${game.players[game.turn].name} 行動...`;
     }
 
-    async function pick(type, tIdx, cIdx) {
-        if (game.turn !== myIdx) return;
-        document.getElementById('snd-flip').play().catch(()=>{});
+    async function aiTurn() {
+        if (!game.players[game.turn].isAI || myIdx !== 0) return; // 只有房主的手機能幫 AI 執行運算
+        
         let stack = game.stack || [];
         if (stack.length >= 3) return;
 
+        // AI 邏輯：隨機選公共牌或自己手牌
+        let type = Math.random() > 0.5 ? 'pub' : 'my';
+        let targetIdx = game.turn;
+        let cardIdx;
+
+        if (type === 'pub') {
+            let closed = game.board.map((c, i) => c.open ? -1 : i).filter(i => i !== -1);
+            cardIdx = closed[Math.floor(Math.random() * closed.length)];
+        } else {
+            let h = game.players[game.turn].hand;
+            let valid = h.map((v, i) => v === -1 ? -1 : i).filter(i => i !== -1);
+            cardIdx = valid[Math.floor(Math.random() * valid.length)];
+        }
+
+        pick(type, targetIdx, cardIdx);
+    }
+
+    async function pick(type, tIdx, cIdx) {
+        if (game.turn !== myIdx && !game.players[game.turn].isAI) return;
+        let stack = game.stack || [];
+        if (stack.length >= 3) return;
+        document.getElementById('snd-flip').play().catch(()=>{});
+
         let v, up = {};
         if (type === 'pub') {
-            if (game.board[cIdx].open) return;
-            v = game.board[cIdx].v;
-            up[`/board/${cIdx}/open`] = true;
+            v = game.board[cIdx].v; up[`/board/${cIdx}/open`] = true;
             stack.push({v: v, type: 'pub', idx: cIdx});
-        } else if (type === 'my') {
-            v = game.players[myIdx].hand[cIdx];
-            if (v === -1) return;
-            up[`/players/${myIdx}/hand/${cIdx}`] = -1;
-            stack.push({v: v, type: 'hand', owner: myIdx, idx: cIdx});
-        } else if (type === 'other') {
+        } else {
             let h = game.players[tIdx].hand;
-            let first = h.findIndex(x => x !== -1);
-            let last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
-            if (cIdx !== first && cIdx !== last) return;
-            v = h[cIdx];
-            up[`/players/${tIdx}/hand/${cIdx}`] = -1;
+            v = h[cIdx]; up[`/players/${tIdx}/hand/${cIdx}`] = -1;
             stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx});
         }
+        
         up['/stack'] = stack;
         await db.ref('trio/' + rCode).update(up);
-
         if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) setTimeout(reset, 1500);
         else if (stack.length === 3) { document.getElementById('snd-match').play().catch(()=>{}); setTimeout(win, 1000); }
     }
@@ -210,14 +211,16 @@
     }
 
     function win() {
-        let s = game.players[myIdx].score + 1;
-        let u = { stack: [], [`/players/${myIdx}/score`]: s, turn: (game.turn + 1) % game.count };
+        let s = game.players[game.turn].score + 1;
+        let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: (game.turn + 1) % game.count };
         let currentP = JSON.parse(JSON.stringify(game.players));
         Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a-b); });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
-        if (game.stack[0].v === 7 || s >= 3) { alert(s >= 3 ? "恭喜獲勝！" : "拿到 7 三重奏，直接獲勝！"); initDeck(); }
+        if (game.stack[0].v === 7 || s >= 3) { alert(game.players[game.turn].name + " 獲勝！"); db.ref('trio/' + rCode).remove(); location.reload(); }
     }
+
+    autoJoin();
 </script>
 </body>
 </html>
