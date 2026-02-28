@@ -1,148 +1,173 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>回憶三重奏 Trio</title>
+    <title>回憶三重奏 Trio - 進階規則版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        :root { --bg: #1a1a1a; --card: #333; --highlight: #f1c40f; }
-        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; touch-action: manipulation; }
-        #status { margin: 10px; font-size: 18px; color: var(--highlight); text-align: center; height: 1.5em; }
-        .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 20px; width: 100%; max-width: 400px; }
-        .card { aspect-ratio: 2/3; background: var(--card); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 1px solid #444; transition: 0.3s; }
-        .card.revealed { background: white; color: black; border-color: var(--highlight); }
-        .hand-area { width: 100%; max-width: 400px; border-top: 1px solid #444; padding-top: 10px; }
-        .hand-title { font-size: 14px; margin-bottom: 5px; opacity: 0.8; }
-        .hand { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 15px; }
+        :root { --bg: #1a1a1a; --card: #333; --highlight: #f1c40f; --player-color: #2ecc71; --comp-color: #e74c3c; }
+        body { background: var(--bg); color: white; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; touch-action: manipulation; user-select: none; }
+        #status { margin: 15px; font-size: 16px; color: var(--highlight); text-align: center; height: 3em; font-weight: bold; line-height: 1.4; }
+        .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 20px; width: 100%; max-width: 400px; }
+        .card { aspect-ratio: 2/3; background: var(--card); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: transform 0.2s, border-color 0.2s; }
+        .card.revealed { background: white; color: black; border-color: var(--highlight); transform: scale(1.05); }
+        .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; }
+        .hand-title { font-size: 11px; margin-bottom: 8px; opacity: 0.7; letter-spacing: 1px; text-transform: uppercase; }
+        .hand { display: flex; gap: 6px; flex-wrap: wrap; }
         .card.hidden { color: transparent; background: #444; }
-        .score-board { display: flex; gap: 20px; margin-top: 10px; font-size: 14px; }
+        .card.playable { border-color: var(--player-color); } /* 提示可以點擊 */
+        .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; margin-bottom: 10px; font-weight: bold; }
+        .active-turn { color: var(--highlight); border-bottom: 2px solid var(--highlight); }
     </style>
 </head>
 <body>
 
-<div id="status">準備開始...</div>
+<div id="status">正在洗牌...</div>
 
 <div class="score-board">
-    <div>你: <span id="p-score">0</span> 組</div>
-    <div>電腦: <span id="c-score">0</span> 組</div>
+    <div id="p-label">玩家得分: <span id="p-score">0</span></div>
+    <div id="c-label">電腦得分: <span id="c-score">0</span></div>
 </div>
 
 <div class="hand-area">
-    <div class="hand-title">電腦的手牌 (僅能翻頭尾)</div>
+    <div class="hand-title">電腦的手牌 (你只能指定翻開其兩端)</div>
     <div id="computer-hand" class="hand"></div>
 </div>
 
-<div class="hand-title">公共牌區</div>
 <div id="public-board" class="board"></div>
 
 <div class="hand-area">
-    <div class="hand-title">你的手牌 (僅能翻頭尾)</div>
+    <div class="hand-title">你的手牌 (你可以隨意出牌)</div>
     <div id="player-hand" class="hand"></div>
 </div>
 
 <script>
-    let deck = [];
     let pHand = [], cHand = [], publicBoard = [];
     let pScore = 0, cScore = 0;
-    let turn = 'player'; // 'player' or 'computer'
+    let turn = 'player';
     let currentReveal = [];
 
-    // 初始化遊戲
     function init() {
-        // 產生 1-12 各三張
-        deck = [];
+        let deck = [];
         for(let i=1; i<=12; i++) deck.push(i, i, i);
         deck.sort(() => Math.random() - 0.5);
 
-        // 分牌
         pHand = deck.splice(0, 9).sort((a,b) => a-b);
         cHand = deck.splice(0, 9).sort((a,b) => a-b);
         publicBoard = deck.map(n => ({ val: n, revealed: false }));
-
+        
+        pScore = 0; cScore = 0;
+        turn = 'player';
+        currentReveal = [];
+        
         render();
-        updateStatus("你的回合！請點擊公共牌或手牌頭尾");
+        updateStatus("你的回合！<br>可點公共牌、自己任何手牌、或電腦手牌兩端");
     }
 
     function render() {
-        const pHandEl = document.getElementById('player-hand');
-        const cHandEl = document.getElementById('computer-hand');
-        const boardEl = document.getElementById('public-board');
-
-        // 渲染玩家手牌
-        pHandEl.innerHTML = pHand.map((n, i) => 
-            `<div class="card revealed" onclick="clickHand('player', ${i})">${n}</div>`).join('');
+        // 玩家手牌：全部可以點擊
+        document.getElementById('player-hand').innerHTML = pHand.map((n, i) => 
+            `<div class="card revealed playable" onclick="clickHand('player', ${i})">${n}</div>`).join('');
         
-        // 渲染電腦手牌 (蓋著)
-        cHandEl.innerHTML = cHand.map((n, i) => 
-            `<div class="card hidden" onclick="clickHand('computer', ${i})">${n}</div>`).join('');
+        // 電腦手牌：只有頭尾有 hover 效果提示
+        document.getElementById('computer-hand').innerHTML = cHand.map((n, i) => {
+            const isEdge = (i === 0 || i === cHand.length - 1);
+            return `<div class="card hidden ${isEdge ? 'playable' : ''}" onclick="clickHand('computer', ${i})">?</div>`;
+        }).join('');
 
-        // 渲染公共牌
-        boardEl.innerHTML = publicBoard.map((card, i) => 
-            `<div class="card ${card.revealed ? 'revealed' : ''}" onclick="clickPublic(${i})">${card.revealed ? card.val : '?'}</div>`).join('');
+        document.getElementById('public-board').innerHTML = publicBoard.map((card, i) => 
+            `<div class="card ${card.revealed ? 'revealed' : 'hidden playable'}" onclick="clickPublic(${i})">${card.revealed ? card.val : '?'}</div>`).join('');
         
         document.getElementById('p-score').innerText = pScore;
         document.getElementById('c-score').innerText = cScore;
+        document.getElementById('p-label').className = (turn === 'player' ? 'active-turn' : '');
+        document.getElementById('c-label').className = (turn === 'computer' ? 'active-turn' : '');
     }
 
     function clickPublic(idx) {
-        if(turn !== 'player' || publicBoard[idx].revealed) return;
-        handleChoice(publicBoard[idx].val, () => { publicBoard[idx].revealed = true; });
+        if(turn !== 'player' || publicBoard[idx].revealed || currentReveal.length >= 3) return;
+        revealCard(publicBoard[idx].val, () => { publicBoard[idx].revealed = true; });
     }
 
     function clickHand(owner, idx) {
-        if(turn !== 'player') return;
-        let targetHand = (owner === 'player') ? pHand : cHand;
-        // 限制只能點頭尾
-        if(idx !== 0 && idx !== targetHand.length - 1) {
-            updateStatus("只能選擇最大或最小的牌！");
-            return;
-        }
+        if(turn !== 'player' || currentReveal.length >= 3) return;
         
-        let val = targetHand[idx];
-        handleChoice(val, () => {
-            targetHand.splice(idx, 1);
-        });
-    }
-
-    function handleChoice(val, removeCallback) {
-        currentReveal.push(val);
-        removeCallback();
-        render();
-
-        if (currentReveal.length > 1 && currentReveal[currentReveal.length-1] !== currentReveal[0]) {
-            updateStatus("不匹配！換電腦...");
-            setTimeout(endTurn, 1000);
-        } else if (currentReveal.length === 3) {
-            updateStatus("三重奏！得分！");
-            if(turn === 'player') pScore++; else cScore++;
-            if(currentReveal[0] === 7) { alert(turn + " 獲得數字 7，直接勝利！"); location.reload(); }
-            currentReveal = [];
-            checkWin();
-            if(turn === 'computer') setTimeout(computerAI, 1000); // 電腦得分可續玩
+        if (owner === 'player') {
+            // 規則修正：自己手牌可以隨意翻
+            let val = pHand[idx];
+            revealCard(val, () => { pHand.splice(idx, 1); });
+        } else {
+            // 規則修正：對手手牌只能翻頭尾
+            if(idx !== 0 && idx !== cHand.length - 1) {
+                updateStatus("指定對手時，只能翻開最大或最小的一張！");
+                return;
+            }
+            let val = cHand[idx];
+            revealCard(val, () => { cHand.splice(idx, 1); });
         }
     }
 
-    function endTurn() {
-        // 蓋回公共牌 (簡化版：此處需更複雜邏輯處理手牌收回，我們暫定失敗就換人)
-        currentReveal = [];
-        turn = (turn === 'player') ? 'computer' : 'player';
+    function revealCard(val, callback) {
+        currentReveal.push(val);
+        callback();
         render();
-        if(turn === 'computer') computerAI();
-        else updateStatus("你的回合！");
+
+        if (currentReveal.length > 1 && val !== currentReveal[0]) {
+            updateStatus("數字不符！<br>回合結束，更換玩家...");
+            setTimeout(nextTurn, 1200);
+        } else if (currentReveal.length === 3) {
+            updateStatus("✨ 三重奏成功！ ✨");
+            if(turn === 'player') pScore++; else cScore++;
+            
+            if(val === 7) { 
+                setTimeout(() => { alert("達成數字 7 三重奏！直接獲勝！"); init(); }, 500);
+                return;
+            }
+            
+            currentReveal = [];
+            if(pScore >= 3 || cScore >= 3) {
+                setTimeout(() => { alert("遊戲結束！恭喜勝出！"); init(); }, 500);
+                return;
+            }
+            // 得分後繼續該玩家回合
+            if(turn === 'computer') setTimeout(computerAI, 800);
+        }
+    }
+
+    function nextTurn() {
+        currentReveal = [];
+        publicBoard.forEach(c => c.revealed = false);
+        turn = (turn === 'player' ? 'computer' : 'player');
+        render();
+        if(turn === 'computer') computerAI(); else updateStatus("你的回合");
     }
 
     function computerAI() {
+        if(turn !== 'computer') return;
         updateStatus("電腦思考中...");
+        
         setTimeout(() => {
-            // AI 簡單邏輯：隨機選公共牌
-            let idx = Math.floor(Math.random() * publicBoard.length);
-            while(publicBoard[idx].revealed) idx = Math.floor(Math.random() * publicBoard.length);
-            handleChoice(publicBoard[idx].val, () => { publicBoard[idx].revealed = true; });
-            // AI 第二、三張邏輯暫略，以此類推...
-        }, 1000);
+            // 電腦隨機選擇：公共牌或自己的手牌，或玩家的頭尾
+            let choice = Math.random();
+            if(choice < 0.4 && pHand.length > 0) {
+                // 電腦指定翻你的頭或尾
+                let idx = Math.random() < 0.5 ? 0 : pHand.length - 1;
+                revealCard(pHand[idx], () => { pHand.splice(idx, 1); });
+            } else {
+                // 電腦翻公共牌
+                let available = publicBoard.filter(c => !c.revealed);
+                if(available.length > 0) {
+                    let c = available[Math.floor(Math.random() * available.length)];
+                    revealCard(c.val, () => { c.revealed = true; });
+                }
+            }
+
+            if(currentReveal.length > 0 && turn === 'computer' && currentReveal.length < 3) {
+                setTimeout(computerAI, 1000);
+            }
+        }, 800);
     }
 
-    function updateStatus(msg) { document.getElementById('status').innerText = msg; }
-    function checkWin() { if(pScore >= 3 || cScore >= 3) { alert("遊戲結束！"); location.reload(); } }
+    function updateStatus(msg) { document.getElementById('status').innerHTML = msg; }
 
     init();
 </script>
