@@ -2,30 +2,26 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>回憶三重奏 Trio - 嚴格回合版</title>
+    <title>回憶三重奏 Trio - 自動蓋牌版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; --panel: #333; }
+        :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; }
         body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
         #login-box { background: #222; padding: 30px; border-radius: 20px; text-align: center; margin-top: 50px; width: 85%; max-width: 350px; }
         input { width: 90%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; background: #333; color: white; text-align: center; }
-        .btn-main { background: var(--highlight); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; margin-top: 10px; }
-        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 3.5em; line-height: 1.4; }
+        .btn-main { background: var(--highlight); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; }
+        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 4em; line-height: 1.4; }
         .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; width: 100%; max-width: 400px; }
-        .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: 0.2s; cursor: default; }
-        /* 只有輪到自己時，可點擊的牌才顯示手指游標 */
+        .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: 0.3s; cursor: default; }
         .my-turn .card { cursor: pointer; }
-        .card.revealed { background: white; color: black; border-color: var(--highlight); transform: scale(1.05); }
-        .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; box-sizing: border-box; position: relative; }
+        .card.revealed { background: white; color: black; border-color: var(--highlight); transform: rotateY(180deg); }
+        .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; box-sizing: border-box; }
         .hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 50px; }
-        .card.hidden-hand { color: transparent; background: #222; }
-        .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; }
-        .active-turn { color: var(--highlight); text-decoration: underline; }
-        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--panel); padding: 20px; border-radius: 15px; border: 2px solid var(--highlight); z-index: 100; text-align: center; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
-        .pick-btn { background: #555; color: white; border: none; padding: 10px 20px; margin: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .pick-btn:hover { background: var(--highlight); color: black; }
+        .card.hidden-hand { color: transparent; background: #222; border-style: dashed; }
+        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 25px; border-radius: 20px; border: 3px solid var(--highlight); z-index: 999; text-align: center; width: 280px; }
+        .pick-btn { background: #444; color: white; border: 2px solid #666; padding: 12px; margin: 8px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 80%; }
     </style>
 </head>
 <body id="main-body">
@@ -38,22 +34,19 @@
 </div>
 
 <div id="game-ui" style="display:none; width: 100%; max-width: 400px;">
-    <div class="score-board" id="score-el"></div>
     <div id="status" class="status-bar">準備中...</div>
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
     <div class="hand-area">
-        <div style="font-size:10px; opacity:0.6; margin-bottom:5px;">我的手牌</div>
+        <div style="font-size:10px; opacity:0.6; margin-bottom:5px;">我的手牌 (排序中)</div>
         <div id="my-hand" class="hand"></div>
     </div>
 </div>
 
 <div id="pick-panel">
-    <p id="pick-msg"></p>
-    <button class="pick-btn" onclick="executePick('min')">最小的牌</button>
-    <button class="pick-btn" onclick="executePick('max')">最大的牌</button>
-    <br>
-    <button style="background:none; border:none; color:#999; margin-top:10px; cursor:pointer;" onclick="closePanel()">取消</button>
+    <p id="pick-msg" style="margin-bottom:15px; font-weight:bold;"></p>
+    <button class="pick-btn" onclick="confirmPick('min')">最小的牌</button>
+    <button class="pick-btn" onclick="confirmPick('max')">最大的牌</button>
 </div>
 
 <audio id="snd-flip" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
@@ -72,7 +65,7 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let myName, rCode, myIdx, game, currentTargetPlayer;
+    let myName, rCode, myIdx, game, targetP, isProcessing = false;
 
     async function joinGame() {
         myName = document.getElementById('userName').value.trim();
@@ -82,10 +75,7 @@
         const snap = await db.ref('trio/' + rCode + '/playerList').get();
         let list = snap.val() || [];
         myIdx = list.indexOf(myName);
-        if (myIdx === -1) { 
-            myIdx = list.length; list.push(myName); 
-            await db.ref('trio/' + rCode + '/playerList').set(list); 
-        }
+        if (myIdx === -1) { myIdx = list.length; list.push(myName); await db.ref('trio/' + rCode + '/playerList').set(list); }
 
         document.getElementById('login-box').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
@@ -95,10 +85,9 @@
             if (myIdx === 0 && (!game || !game.players)) { autoInit(); return; }
             if (game && game.players) {
                 render();
-                // 只有房主且輪到 AI 時觸發 AI 行動
-                if (game.players[game.turn].isAI && myIdx === 0 && !game.aiActing) {
-                    db.ref('trio/' + rCode).update({ aiActing: true });
-                    setTimeout(aiTurn, 2000);
+                if (game.players[game.turn].isAI && myIdx === 0 && !game.lock) {
+                    db.ref('trio/' + rCode).update({ lock: true });
+                    setTimeout(aiTurn, 2500);
                 }
             }
         });
@@ -106,138 +95,130 @@
 
     function autoInit() {
         let pList = [myName, "🤖 電腦 1", "🤖 電腦 2"];
-        let pCount = pList.length;
         let cards = [];
         for(let i=1; i<=12; i++) cards.push(i, i, i);
         cards.sort(() => Math.random() - 0.5);
         let players = {};
-        for(let i=0; i<pCount; i++) {
+        for(let i=0; i<3; i++) {
             let hand = cards.splice(0, 9).sort((a,b) => a-b);
             players[i] = { hand: hand, score: 0, name: pList[i], isAI: pList[i].includes("🤖") };
         }
-        db.ref('trio/' + rCode).update({
+        db.ref('trio/' + rCode).set({
             board: cards.map(v => ({v: v, open: false})),
-            players: players, turn: 0, stack: [], count: pCount, playerList: pList, aiActing: false
+            players: players, turn: 0, stack: [], count: 3, playerList: pList, lock: false
         });
     }
 
     function render() {
-        // 更新 Body 的 class，用來控制 cursor
-        if (game.turn === myIdx) document.getElementById('main-body').classList.add('my-turn');
-        else document.getElementById('main-body').classList.remove('my-turn');
-
-        let sHtml = "";
-        for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${game.players[i].name}: ${game.players[i].score}</div>`;
-        document.getElementById('score-el').innerHTML = sHtml;
-
+        document.getElementById('main-body').className = (game.turn === myIdx && !game.lock) ? "my-turn" : "";
+        
         document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
-            `<div class="card ${c.open ? 'revealed' : ''}" onclick="pick('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
+            `<div class="card ${c.open ? 'revealed' : ''}" onclick="pickAction('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
         ).join('');
 
         let myHand = game.players[myIdx].hand || [];
         document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
-            v === -1 ? `<div class="card" style="opacity:0"></div>` : `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
+            v === -1 ? `<div class="card" style="opacity:0"></div>` : `<div class="card revealed" onclick="pickAction('my', ${myIdx}, ${i})">${v}</div>`
         ).join('');
 
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
             let h = game.players[i].hand || [];
-            oHtml += `<div class="hand-area" onclick="openPickPanel(${i})"><div style="font-size:10px; margin-bottom:5px;">${game.players[i].name} (點擊指定)</div><div class="hand">`;
-            h.forEach((v, idx) => {
-                if (v === -1) { oHtml += `<div class="card" style="opacity:0"></div>`; return; }
-                oHtml += `<div class="card hidden-hand">?</div>`;
+            oHtml += `<div class="hand-area" onclick="openPickPanel(${i})">
+                <div style="font-size:10px; margin-bottom:5px;">${game.players[i].name} (得分: ${game.players[i].score})</div>
+                <div class="hand">`;
+            h.forEach(v => {
+                if (v === -1) oHtml += `<div class="card" style="opacity:0"></div>`;
+                else oHtml += `<div class="card hidden-hand">?</div>`;
             });
             oHtml += `</div></div>`;
         }
         document.getElementById('others-area').innerHTML = oHtml;
-        document.getElementById('status').innerHTML = (game.turn === myIdx) ? "換你出牌了！" : `等待 ${game.players[game.turn].name} 行動...<br><small>${game.msg || ''}</small>`;
+        document.getElementById('status').innerHTML = (game.turn === myIdx) ? "輪到你了！請翻牌" : `等待 ${game.players[game.turn].name} 行動...<br><small>${game.msg || ''}</small>`;
     }
 
-    function openPickPanel(targetIdx) {
-        if (game.turn !== myIdx) return; // 嚴格檢查回合
-        currentTargetPlayer = targetIdx;
-        document.getElementById('pick-msg').innerText = `你想看 ${game.players[targetIdx].name} 的哪張牌？`;
+    function openPickPanel(idx) {
+        if (game.turn !== myIdx || game.lock) return;
+        targetP = idx;
+        document.getElementById('pick-msg').innerText = `指定 ${game.players[idx].name} 的牌：`;
         document.getElementById('pick-panel').style.display = 'block';
     }
 
-    function closePanel() { document.getElementById('pick-panel').style.display = 'none'; }
-
-    function executePick(mode) {
-        closePanel();
-        let h = game.players[currentTargetPlayer].hand;
-        let cardIdx = (mode === 'min') ? h.findIndex(x => x !== -1) : h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
-        let msg = `${myName}：我要看 ${game.players[currentTargetPlayer].name} ${mode === 'min' ? '最小' : '最大'}的牌！`;
-        db.ref('trio/' + rCode).update({ msg: msg });
-        pick('other', currentTargetPlayer, cardIdx);
+    function confirmPick(mode) {
+        document.getElementById('pick-panel').style.display = 'none';
+        let h = game.players[targetP].hand;
+        let cIdx = (mode === 'min') ? h.findIndex(x => x !== -1) : h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
+        db.ref('trio/' + rCode).update({ msg: `${myName} 看了 ${game.players[targetP].name} 的${mode === 'min'?'最小':'最大'}牌` });
+        pickAction('other', targetP, cIdx);
     }
 
-    async function aiTurn() {
-        let stack = game.stack || [];
-        if (stack.length >= 3) return;
-        let type = Math.random() > 0.4 ? 'pub' : 'other';
-        let tIdx = (type === 'pub') ? game.turn : Math.floor(Math.random() * game.count);
-        if (type === 'other' && tIdx === game.turn) tIdx = (tIdx + 1) % game.count;
-        
-        let cIdx, modeMsg = "";
-        if (type === 'pub') {
-            let closed = game.board.map((c, i) => c.open ? -1 : i).filter(i => i !== -1);
-            cIdx = closed[Math.floor(Math.random() * closed.length)];
-        } else {
-            let h = game.players[tIdx].hand;
-            let first = h.findIndex(x => x !== -1), last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
-            let isMin = Math.random() > 0.5;
-            cIdx = isMin ? first : last;
-            modeMsg = `${game.players[game.turn].name}：我要看 ${game.players[tIdx].name} ${isMin ? '最小' : '最大'}的牌！`;
-        }
-        if (modeMsg) await db.ref('trio/' + rCode).update({ msg: modeMsg });
-        pick('other_ai', tIdx, cIdx, type);
-    }
-
-    async function pick(type, tIdx, cIdx, aiRealType) {
-        // 嚴格檢查：不是自己的回合，且不是電腦行動，則不准點擊
-        if (game.turn !== myIdx && type !== 'other_ai') return;
-        
+    async function pickAction(type, tIdx, cIdx) {
+        if ((game.turn !== myIdx && !game.players[game.turn].isAI) || game.lock) return;
         let stack = game.stack || [];
         if (stack.length >= 3) return;
 
         document.getElementById('snd-flip').play().catch(()=>{});
         let v, up = {};
-        
-        if (type === 'pub' || (type === 'other_ai' && aiRealType === 'pub')) {
+
+        if (type === 'pub') {
             if (game.board[cIdx].open) return;
             v = game.board[cIdx].v; up[`/board/${cIdx}/open`] = true;
             stack.push({v: v, type: 'pub', idx: cIdx});
         } else {
-            v = game.players[tIdx].hand[cIdx]; up[`/players/${tIdx}/hand/${cIdx}`] = -1;
-            stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx});
+            v = game.players[tIdx].hand[cIdx];
+            if (v === -1 || v === undefined) return;
+            up[`/players/${tIdx}/hand/${cIdx}`] = -1;
+            stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx, val: v});
         }
-        
+
         up['/stack'] = stack;
         await db.ref('trio/' + rCode).update(up);
-        if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) setTimeout(reset, 3000);
-        else if (stack.length === 3) { document.getElementById('snd-match').play().catch(()=>{}); setTimeout(win, 2000); }
+
+        if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) {
+            db.ref('trio/' + rCode).update({ lock: true });
+            setTimeout(resetTurn, 3000); // 停留三秒後蓋回
+        } else if (stack.length === 3) {
+            document.getElementById('snd-match').play().catch(()=>{});
+            setTimeout(winSet, 2000);
+        }
     }
 
-    function reset() {
-        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "", aiActing: false };
+    function resetTurn() {
+        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "數字不符，牌已蓋回", lock: false };
+        // 蓋回桌面上所有牌
         game.board.forEach((c, i) => { u[`/board/${i}/open`] = false; });
+        // 手牌歸還邏輯
         let currentP = JSON.parse(JSON.stringify(game.players));
-        game.stack.forEach(item => { if (item.type === 'hand') { currentP[item.owner].hand[item.idx] = item.v; currentP[item.owner].hand = currentP[item.owner].hand.filter(x => x !== -1).sort((a,b) => a-b); } });
+        game.stack.forEach(item => {
+            if (item.type === 'hand') {
+                let ownerHand = currentP[item.owner].hand;
+                ownerHand[item.idx] = item.v; // 塞回去
+                currentP[item.owner].hand = ownerHand.filter(x => x !== -1).sort((a,b) => a-b); // 重新排序
+            }
+        });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
     }
 
-    function win() {
+    function winSet() {
         let s = game.players[game.turn].score + 1;
-        let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: (game.turn + 1) % game.count, msg: "", aiActing: false };
+        let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: game.turn, msg: "三重奏成功！繼續行動", lock: false };
         let currentP = JSON.parse(JSON.stringify(game.players));
         Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a-b); });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
         if (game.stack[0].v === 7 || s >= 3) { alert(game.players[game.turn].name + " 獲勝！"); db.ref('trio/' + rCode).remove(); location.reload(); }
     }
-    autoJoin();
+
+    async function aiTurn() {
+        let type = Math.random() > 0.5 ? 'pub' : 'other';
+        let tIdx = (type === 'pub') ? game.turn : Math.floor(Math.random() * game.count);
+        let h = game.players[tIdx].hand;
+        let first = h.findIndex(x => x !== -1), last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
+        let cIdx = (type === 'pub') ? game.board.findIndex(c => !c.open) : (Math.random() > 0.5 ? first : last);
+        pickAction(type, tIdx, cIdx);
+    }
 </script>
 </body>
 </html>
