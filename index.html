@@ -2,14 +2,14 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>回憶三重奏 Trio Online</title>
+    <title>回憶三重奏 Trio - 自動同步版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
         :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; }
         body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
-        .status-bar { margin: 15px; font-size: 16px; color: var(--highlight); text-align: center; height: 3.5em; font-weight: bold; }
+        .status-bar { margin: 15px; font-size: 16px; color: var(--highlight); text-align: center; height: 3.5em; font-weight: bold; line-height: 1.4; }
         .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; width: 100%; max-width: 400px; }
         .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border: 2px solid #444; transition: 0.2s; cursor: pointer; }
         .card.revealed { background: white; color: black; border-color: var(--highlight); transform: scale(1.05); }
@@ -18,25 +18,19 @@
         .card.hidden-hand { color: transparent; background: #222; }
         .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; }
         .btn-action { background: var(--highlight); border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; margin: 10px; color: #000; cursor: pointer; }
-        input { padding: 12px; border-radius: 8px; border: none; margin: 5px; width: 80%; text-align: center; background: #333; color: white; }
     </style>
 </head>
 <body>
 
-<div id="login-ui">
-    <h2 style="color:var(--highlight)">🧩 Trio 回憶三重奏</h2>
-    <input type="text" id="roomId" placeholder="房號 (例如: 888)">
-    <input type="number" id="playerIdx" placeholder="玩家編號 (0, 1, 2)">
-    <br>
-    <button class="btn-action" onclick="joinGame()">進入遊戲</button>
-</div>
-
-<div id="game-ui" style="display:none;">
+<div id="game-ui">
     <div class="score-board" id="score-el"></div>
-    <div id="status" class="status-bar">讀取資料中...</div>
+    <div id="status" class="status-bar">正在讀取雲端狀態...</div>
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
-    <div class="hand-area"><div id="my-hand" class="hand"></div></div>
+    <div class="hand-area">
+        <div style="font-size:10px; opacity:0.6; margin-bottom:5px;" id="my-label">我的手牌</div>
+        <div id="my-hand" class="hand"></div>
+    </div>
     <button id="host-btn" class="btn-action" style="display:none;" onclick="initDeck()">房主洗牌發牌</button>
 </div>
 
@@ -56,31 +50,27 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let rId, myIdx, game;
+    const rId = "fixed_room_123"; 
+    let myIdx = null;
+    let game = null;
 
-    function playSound(id) {
-        const s = document.getElementById(id);
-        s.currentTime = 0;
-        s.play().catch(()=>{}); // 避免瀏覽器攔截自動播放
-    }
+    async function autoJoin() {
+        const urlParams = new URLSearchParams(window.location.search);
+        let pParam = urlParams.get('p');
+        
+        if (pParam !== null) {
+            myIdx = parseInt(pParam);
+        } else {
+            myIdx = parseInt(prompt("你是第幾位玩家? (請輸入 0, 1 或 2)\n提示：多人玩請在網址後加 ?p=1"));
+        }
 
-    function joinGame() {
-        rId = document.getElementById('roomId').value;
-        myIdx = parseInt(document.getElementById('playerIdx').value);
-        if (!rId || isNaN(myIdx)) return alert("請填寫房號與編號");
-
-        document.getElementById('login-ui').style.display = 'none';
-        document.getElementById('game-ui').style.display = 'block';
         if (myIdx === 0) document.getElementById('host-btn').style.display = 'block';
+        document.getElementById('my-label').innerText = `我是玩家 P${myIdx} (我的手牌)`;
 
-        // 這裡確保連線到正確的路徑
         db.ref('trio/' + rId).on('value', (s) => {
             game = s.val();
-            if (game) {
-                render();
-            } else {
-                document.getElementById('status').innerText = "房間建立成功！請房主洗牌";
-            }
+            if (game && game.players) render();
+            else document.getElementById('status').innerText = "連線成功！等待 P0 洗牌...";
         });
     }
 
@@ -88,106 +78,132 @@
         let cards = [];
         for(let i=1; i<=12; i++) cards.push(i, i, i);
         cards.sort(() => Math.random() - 0.5);
-
         let players = {};
         for(let i=0; i<3; i++) {
             let hand = cards.splice(0, 9).sort((a,b) => a-b);
             players[i] = { hand: hand, score: 0 };
         }
-
         db.ref('trio/' + rId).set({
             board: cards.map(v => ({v: v, open: false})),
             players: players,
             turn: 0,
-            stack: [],
+            stack: [], // 記錄這回合翻開的：{v: 數字, origin: 'pub'|'p0'|'p1'|'p2'}
             count: 3
         });
     }
 
     function render() {
-        // 更新分數與渲染
         let sHtml = "";
         for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">P${i}: ${game.players[i].score}</div>`;
         document.getElementById('score-el').innerHTML = sHtml;
 
-        // 公共牌
         document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
             `<div class="card ${c.open ? 'revealed' : ''}" onclick="pick('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
         ).join('');
 
-        // 自己手牌
-        let myHand = game.players[myIdx].hand || [];
+        let myHand = game.players[myIdx] ? game.players[myIdx].hand : [];
         document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
-            `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
+            v === -1 ? `<div class="card" style="opacity:0"></div>` : `<div class="card revealed" onclick="pick('my', ${myIdx}, ${i})">${v}</div>`
         ).join('');
 
-        // 對手手牌
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
             oHtml += `<div class="hand-area"><div class="hand">`;
-            (game.players[i].hand || []).forEach((v, idx) => {
-                let isEdge = (idx === 0 || idx === (game.players[i].hand.length - 1));
-                oHtml += `<div class="card ${isEdge ? '' : 'hidden-hand'}" onclick="pick('other', ${i}, ${idx})">${isEdge ? '?' : ''}</div>`;
+            let h = game.players[i].hand || [];
+            h.forEach((v, idx) => {
+                if (v === -1) { oHtml += `<div class="card" style="opacity:0"></div>`; return; }
+                let isEdge = (idx === 0 || idx === (h.length - 1)) || (h[idx-1] === -1 || h[idx+1] === -1);
+                // 簡化判定：只要是該玩家陣列的最左或最右非空值
+                let firstIdx = h.findIndex(x => x !== -1);
+                let lastIdx = h.map(x => x).reverse().findIndex(x => x !== -1);
+                lastIdx = h.length - 1 - lastIdx;
+                let realEdge = (idx === firstIdx || idx === lastIdx);
+
+                oHtml += `<div class="card ${realEdge ? '' : 'hidden-hand'}" onclick="pick('other', ${i}, ${idx})">${realEdge ? '?' : ''}</div>`;
             });
             oHtml += `</div></div>`;
         }
         document.getElementById('others-area').innerHTML = oHtml;
 
-        const status = document.getElementById('status');
-        if (game.turn === myIdx) status.innerHTML = "輪到你了！請翻牌";
-        else status.innerHTML = `等待 P${game.turn} 行動...<br>已翻: ${game.stack ? game.stack.join(', ') : '無'}`;
+        document.getElementById('status').innerHTML = (game.turn === myIdx) ? "輪到你了！請翻牌" : `等待 P${game.turn} 行動...`;
     }
 
-    async function pick(type, targetIdx, cardIdx) {
+    async function pick(type, tIdx, cIdx) {
         if (game.turn !== myIdx) return;
+        document.getElementById('snd-flip').play().catch(()=>{});
+        
         let stack = game.stack || [];
         if (stack.length >= 3) return;
 
-        playSound('snd-flip'); // 翻牌音效
-
-        let val;
-        let updates = {};
+        let val, updates = {};
         if (type === 'pub') {
-            if (game.board[cardIdx].open) return;
-            val = game.board[cardIdx].v;
-            updates[`/board/${cardIdx}/open`] = true;
+            if (game.board[cIdx].open) return;
+            val = game.board[cIdx].v;
+            updates[`/board/${cIdx}/open`] = true;
+            stack.push({v: val, type: 'pub', idx: cIdx});
         } else if (type === 'my') {
-            val = game.players[myIdx].hand[cardIdx];
-            updates[`/players/${myIdx}/hand/${cardIdx}`] = null;
+            val = game.players[myIdx].hand[cIdx];
+            if (val === -1) return;
+            updates[`/players/${myIdx}/hand/${cIdx}`] = -1; // 暫時移除
+            stack.push({v: val, type: 'hand', owner: myIdx, idx: cIdx});
         } else if (type === 'other') {
-            let hand = game.players[targetIdx].hand;
-            if (cardIdx !== 0 && cardIdx !== hand.length - 1) return;
-            val = hand[cardIdx];
-            updates[`/players/${targetIdx}/hand/${cardIdx}`] = null;
+            let h = game.players[tIdx].hand;
+            let first = h.findIndex(x => x !== -1);
+            let last = h.map(x => x).reverse().findIndex(x => x !== -1);
+            last = h.length - 1 - last;
+            if (cIdx !== first && cIdx !== last) return alert("只能翻對手最大或最小的牌！");
+            val = h[cIdx];
+            updates[`/players/${tIdx}/hand/${cIdx}`] = -1;
+            stack.push({v: val, type: 'hand', owner: tIdx, idx: cIdx});
         }
 
-        stack.push(val);
         updates['/stack'] = stack;
         await db.ref('trio/' + rId).update(updates);
 
-        if (stack.length > 1 && stack[stack.length - 1] !== stack[0]) {
-            setTimeout(resetTurn, 1200);
+        if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) {
+            setTimeout(resetTurn, 1500);
         } else if (stack.length === 3) {
-            playSound('snd-match'); // 配對成功音效
+            document.getElementById('snd-match').play().catch(()=>{});
             setTimeout(winSet, 1000);
         }
     }
 
     function resetTurn() {
-        let updates = { stack: [], turn: (game.turn + 1) % game.count };
-        game.board.forEach((c, i) => { updates[`/board/${i}/open`] = false; });
-        db.ref('trio/' + rId).update(updates);
+        let up = { stack: [], turn: (game.turn + 1) % 3 };
+        // 1. 公共牌蓋回
+        game.board.forEach((c, i) => { up[`/board/${i}/open`] = false; });
+        // 2. 手牌回存並重新排序
+        let currentPlayers = JSON.parse(JSON.stringify(game.players));
+        game.stack.forEach(item => {
+            if (item.type === 'hand') {
+                let h = currentPlayers[item.owner].hand;
+                h[item.idx] = item.v; // 放回去
+                // 過濾掉 -1 並重新排序
+                currentPlayers[item.owner].hand = h.filter(x => x !== -1).sort((a,b) => a-b);
+            }
+        });
+        up['/players'] = currentPlayers;
+        db.ref('trio/' + rId).update(up);
     }
 
     function winSet() {
         let score = game.players[myIdx].score + 1;
-        db.ref('trio/' + rId).update({ 
-            stack: [], 
-            [`/players/${myIdx}/score`]: score,
-            turn: (game.turn + 1) % game.count 
+        let up = { stack: [], [`/players/${myIdx}/score`]: score, turn: (game.turn + 1) % 3 };
+        // 三重奏成功，手牌中的 -1 徹底消失（不放回）
+        let currentPlayers = JSON.parse(JSON.stringify(game.players));
+        Object.keys(currentPlayers).forEach(pId => {
+            currentPlayers[pId].hand = currentPlayers[pId].hand.filter(x => x !== -1).sort((a,b) => a-b);
         });
+        up['/players'] = currentPlayers;
+        db.ref('trio/' + rId).update(up);
+        if (game.stack[0].v === 7 || score >= 3) {
+            alert(score >= 3 ? "獲得 3 組三重奏，獲勝！" : "獲得數字 7 三重奏，直接獲勝！");
+            initDeck();
+        }
     }
+
+    autoJoin();
 </script>
 </body>
 </html>
