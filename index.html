@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>回憶三重奏 Trio - 自動蓋牌版</title>
+    <title>回憶三重奏 Trio - 終極修正版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
@@ -20,7 +20,7 @@
         .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 10px; box-sizing: border-box; }
         .hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 50px; }
         .card.hidden-hand { color: transparent; background: #222; border-style: dashed; }
-        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 25px; border-radius: 20px; border: 3px solid var(--highlight); z-index: 999; text-align: center; width: 280px; }
+        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 25px; border-radius: 20px; border: 3px solid var(--highlight); z-index: 999; text-align: center; width: 280px; box-shadow: 0 0 100px rgba(0,0,0,1); }
         .pick-btn { background: #444; color: white; border: 2px solid #666; padding: 12px; margin: 8px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 80%; }
     </style>
 </head>
@@ -38,7 +38,7 @@
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
     <div class="hand-area">
-        <div style="font-size:10px; opacity:0.6; margin-bottom:5px;">我的手牌 (排序中)</div>
+        <div style="font-size:10px; opacity:0.6; margin-bottom:5px;">我的手牌 (小 → 大)</div>
         <div id="my-hand" class="hand"></div>
     </div>
 </div>
@@ -65,7 +65,7 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let myName, rCode, myIdx, game, targetP, isProcessing = false;
+    let myName, rCode, myIdx, game, targetP;
 
     async function joinGame() {
         myName = document.getElementById('userName').value.trim();
@@ -75,7 +75,11 @@
         const snap = await db.ref('trio/' + rCode + '/playerList').get();
         let list = snap.val() || [];
         myIdx = list.indexOf(myName);
-        if (myIdx === -1) { myIdx = list.length; list.push(myName); await db.ref('trio/' + rCode + '/playerList').set(list); }
+        if (myIdx === -1) { 
+            myIdx = list.length; 
+            list.push(myName); 
+            await db.ref('trio/' + rCode + '/playerList').set(list); 
+        }
 
         document.getElementById('login-box').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
@@ -94,18 +98,21 @@
     }
 
     function autoInit() {
+        // 強制補齊至 3 人
         let pList = [myName, "🤖 電腦 1", "🤖 電腦 2"];
         let cards = [];
         for(let i=1; i<=12; i++) cards.push(i, i, i);
         cards.sort(() => Math.random() - 0.5);
+        
         let players = {};
         for(let i=0; i<3; i++) {
-            let hand = cards.splice(0, 9).sort((a,b) => a-b);
+            // 每人發 9 張牌並由小到大排序
+            let hand = cards.splice(0, 9).sort((a,b) => a - b);
             players[i] = { hand: hand, score: 0, name: pList[i], isAI: pList[i].includes("🤖") };
         }
-        db.ref('trio/' + rCode).set({
+        db.ref('trio/' + rCode).update({
             board: cards.map(v => ({v: v, open: false})),
-            players: players, turn: 0, stack: [], count: 3, playerList: pList, lock: false
+            players: players, turn: 0, stack: [], count: 3, playerList: pList, lock: false, msg: ""
         });
     }
 
@@ -169,7 +176,7 @@
             v = game.players[tIdx].hand[cIdx];
             if (v === -1 || v === undefined) return;
             up[`/players/${tIdx}/hand/${cIdx}`] = -1;
-            stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx, val: v});
+            stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx});
         }
 
         up['/stack'] = stack;
@@ -177,7 +184,7 @@
 
         if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) {
             db.ref('trio/' + rCode).update({ lock: true });
-            setTimeout(resetTurn, 3000); // 停留三秒後蓋回
+            setTimeout(resetTurn, 3000); // 失敗：停留三秒後蓋回
         } else if (stack.length === 3) {
             document.getElementById('snd-match').play().catch(()=>{});
             setTimeout(winSet, 2000);
@@ -186,15 +193,15 @@
 
     function resetTurn() {
         let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "數字不符，牌已蓋回", lock: false };
-        // 蓋回桌面上所有牌
+        // 桌上牌蓋回
         game.board.forEach((c, i) => { u[`/board/${i}/open`] = false; });
-        // 手牌歸還邏輯
+        // 手牌歸還並重新排序
         let currentP = JSON.parse(JSON.stringify(game.players));
         game.stack.forEach(item => {
             if (item.type === 'hand') {
-                let ownerHand = currentP[item.owner].hand;
-                ownerHand[item.idx] = item.v; // 塞回去
-                currentP[item.owner].hand = ownerHand.filter(x => x !== -1).sort((a,b) => a-b); // 重新排序
+                let h = currentP[item.owner].hand;
+                h[item.idx] = item.v;
+                currentP[item.owner].hand = h.filter(x => x !== -1).sort((a,b) => a - b);
             }
         });
         u['/players'] = currentP;
@@ -205,10 +212,14 @@
         let s = game.players[game.turn].score + 1;
         let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: game.turn, msg: "三重奏成功！繼續行動", lock: false };
         let currentP = JSON.parse(JSON.stringify(game.players));
-        Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a-b); });
+        Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a - b); });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
-        if (game.stack[0].v === 7 || s >= 3) { alert(game.players[game.turn].name + " 獲勝！"); db.ref('trio/' + rCode).remove(); location.reload(); }
+        if (game.stack[0].v === 7 || s >= 3) { 
+            alert(game.players[game.turn].name + " 獲勝！"); 
+            db.ref('trio/' + rCode).remove(); 
+            location.reload(); 
+        }
     }
 
     async function aiTurn() {
