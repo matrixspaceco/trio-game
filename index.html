@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>回憶三重奏 Trio - 修正版</title>
+    <title>回憶三重奏 Trio - 數字校正版 v1.1</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
@@ -13,22 +13,41 @@
         input { width: 90%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; background: #333; color: white; text-align: center; font-size: 16px; }
         .btn-main { background: var(--highlight); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; }
         
-        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 4em; line-height: 1.4; }
+        .status-bar { margin: 15px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 4em; }
         .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; margin-bottom: 10px; }
         
         /* 牌桌佈局 */
         .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; width: 100%; max-width: 400px; }
         
-        /* 卡牌樣式 - 修正 rotateY 導致的文字顛倒 */
-        .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 2px solid #444; transition: 0.2s; cursor: default; }
+        /* 核心修復：徹底移除 rotateY 屬性 */
+        .card { 
+            aspect-ratio: 2/3; 
+            background: var(--card-back); 
+            border-radius: 6px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 20px; 
+            font-weight: bold; 
+            border: 2px solid #444; 
+            transition: transform 0.2s, background 0.2s; 
+            cursor: default;
+            transform: none !important; /* 強制不旋轉 */
+        }
+        
         .my-turn .card { cursor: pointer; }
         
-        /* 翻開狀態：背景變白，文字變黑，不再使用會導致顛倒的 rotateY */
-        .card.revealed { background: white !important; color: black !important; border-color: var(--highlight); transform: scale(1.05); }
+        /* 翻開狀態：僅更換顏色，絕對不旋轉 */
+        .card.revealed { 
+            background: #ffffff !important; 
+            color: #000000 !important; 
+            border-color: var(--highlight); 
+            transform: scale(1.05) !important; /* 僅縮放 */
+        }
         
         .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 15px; box-sizing: border-box; }
         .hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 50px; }
-        .card.hidden-hand { color: transparent; background: #222; border-style: dashed; }
+        .card.hidden-hand { color: transparent !important; background: #222 !important; border-style: dashed; }
         .active-turn { color: var(--highlight); text-decoration: underline; }
 
         #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 25px; border-radius: 20px; border: 3px solid var(--highlight); z-index: 1000; text-align: center; width: 260px; box-shadow: 0 0 100px #000; }
@@ -40,7 +59,7 @@
 <div id="login-box">
     <h2 style="color:var(--highlight)">🧩 Trio 回憶三重奏</h2>
     <input type="text" id="userName" placeholder="你的名字">
-    <input type="text" id="roomCode" placeholder="邀請碼 (如: 888)">
+    <input type="text" id="roomCode" placeholder="邀請碼 (如: ABC)">
     <button class="btn-main" onclick="joinGame()">即刻開局</button>
 </div>
 
@@ -50,7 +69,7 @@
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
     <div class="hand-area">
-        <div style="font-size:11px; opacity:0.6; margin-bottom:5px;">我的手牌 (小到大排序)</div>
+        <div style="font-size:11px; opacity:0.6; margin-bottom:5px;">我的手牌 (已排序)</div>
         <div id="my-hand" class="hand"></div>
     </div>
 </div>
@@ -129,24 +148,19 @@
 
     function render() {
         document.getElementById('main-body').className = (game.turn === myIdx && !game.lock) ? "my-turn" : "";
-        
-        // 分數表
         let sHtml = "";
         for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${game.players[i].name}: ${game.players[i].score}</div>`;
         document.getElementById('score-el').innerHTML = sHtml;
 
-        // 公共牌
         document.getElementById('public-board').innerHTML = game.board.map((c, i) => 
             `<div class="card ${c.open ? 'revealed' : ''}" onclick="pickAction('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
         ).join('');
 
-        // 自己手牌 - 確保這裡不再旋轉
         let myHand = game.players[myIdx].hand || [];
         document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
             v === -1 ? `<div class="card" style="opacity:0"></div>` : `<div class="card revealed" onclick="pickAction('my', myIdx, i)">${v}</div>`
         ).join('');
 
-        // 他人手牌區
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
@@ -167,7 +181,7 @@
     function openPickPanel(idx) {
         if (game.turn !== myIdx || game.lock) return;
         targetP = idx;
-        document.getElementById('pick-msg').innerText = `指定 ${game.players[idx].name} 的：`;
+        document.getElementById('pick-msg').innerText = `指定 ${game.players[idx].name} 的牌：`;
         document.getElementById('pick-panel').style.display = 'block';
     }
 
@@ -213,7 +227,7 @@
     }
 
     function resetTurn() {
-        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "數字不符，已蓋牌", lock: false };
+        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "不符，已蓋牌", lock: false };
         game.board.forEach((c, i) => { u[`/board/${i}/open`] = false; });
         let currentP = JSON.parse(JSON.stringify(game.players));
         game.stack.forEach(item => {
@@ -229,7 +243,7 @@
 
     function winSet() {
         let s = game.players[game.turn].score + 1;
-        let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: game.turn, msg: "成功！繼續行動", lock: false };
+        let u = { stack: [], [`/players/${game.turn}/score`]: s, turn: game.turn, msg: "成功！繼續翻", lock: false };
         let currentP = JSON.parse(JSON.stringify(game.players));
         Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a - b); });
         u['/players'] = currentP;
