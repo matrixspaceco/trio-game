@@ -2,69 +2,63 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Trio 回憶三重奏 - 玩家自由版</title>
+    <title>Trio Trio - 極速優化版</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
         :root { --bg: #121212; --highlight: #f1c40f; --card-back: #2c3e50; }
-        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; user-select: none; }
-        #login-box { background: #222; padding: 30px; border-radius: 20px; text-align: center; margin-top: 50px; width: 85%; max-width: 350px; border: 2px solid #444; }
-        input { width: 90%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; background: #333; color: white; text-align: center; font-size: 16px; }
-        .btn-main { background: var(--highlight); color: black; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; font-size: 18px; }
+        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 5px; user-select: none; overflow-x: hidden; }
+        #login-box { background: #222; padding: 20px; border-radius: 15px; text-align: center; margin-top: 50px; width: 85%; max-width: 320px; border: 2px solid #444; }
+        input { width: 85%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; background: #333; color: white; text-align: center; }
+        .btn-main { background: var(--highlight); color: black; border: none; padding: 12px; border-radius: 8px; font-weight: bold; width: 90%; cursor: pointer; }
         
-        .status-bar { margin: 10px; font-size: 18px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 3.5em; }
-        .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 400px; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #333; margin-bottom: 10px; }
+        .status-bar { margin: 8px; font-size: 16px; color: var(--highlight); text-align: center; font-weight: bold; min-height: 3em; }
+        .score-board { display: flex; justify-content: space-around; width: 100%; max-width: 360px; font-size: 14px; padding: 5px 0; border-bottom: 1px solid #333; }
         
-        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0; width: 100%; max-width: 400px; }
-        .card { 
-            aspect-ratio: 2/3; background: var(--card-back); border-radius: 8px; 
-            display: flex; align-items: center; justify-content: center; 
-            font-size: 24px; font-weight: bold; border: 2px solid #444; 
-            transition: 0.2s; position: relative; cursor: pointer;
-        }
+        /* 中間公共牌縮小 */
+        .board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin: 10px 0; width: 95%; max-width: 360px; }
+        .card { aspect-ratio: 2/3; background: var(--card-back); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; border: 1.5px solid #444; }
         .card.revealed { background: #fff !important; color: #000 !important; border-color: var(--highlight); }
         
-        .hand-area { width: 100%; max-width: 400px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; margin-bottom: 10px; box-sizing: border-box; }
-        .hand { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; min-height: 80px; }
-        /* 玩家手牌：現在所有卡片都可自由點選 */
-        .card-hand { width: 48px; height: 72px; background: #fff; color: #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; font-size: 20px; border: 2px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.1s; }
-        .card-hand:active { transform: scale(0.9); }
+        /* 手牌區域優化 */
+        .hand-area { width: 95%; max-width: 360px; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 10px; margin-bottom: 8px; }
+        .hand { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+        .card-hand { width: 38px; height: 55px; background: #fff; color: #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; cursor: pointer; border: 1px solid #ccc; }
         
-        /* 對手手牌區 */
-        .other-card-slot { width: 32px; height: 48px; background: #222; border: 1px dashed #444; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-        .other-card-slot.revealed { background: #fff !important; color: #000 !important; border-style: solid; font-size: 18px; font-weight: bold; border-color: var(--highlight); }
+        /* 對手區域緊湊化 */
+        .other-card-slot { width: 22px; height: 32px; background: #222; border: 1px dashed #444; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+        .other-card-slot.revealed { background: #fff !important; color: #000 !important; font-weight: bold; border-style: solid; }
         
-        .active-turn { color: var(--highlight); text-decoration: underline; }
-
-        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 25px; border-radius: 20px; border: 3px solid var(--highlight); z-index: 1000; text-align: center; width: 280px; }
-        .pick-btn { background: #444; color: white; border: 1px solid #666; padding: 12px; margin: 8px; border-radius: 10px; cursor: pointer; width: 90%; font-weight: bold; font-size: 16px; }
+        .active-turn { color: var(--highlight); text-decoration: underline; font-size: 1.1em; }
+        #pick-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #333; padding: 20px; border-radius: 15px; border: 2px solid var(--highlight); z-index: 1000; text-align: center; width: 240px; }
+        .pick-btn { background: #444; color: white; border: none; padding: 10px; margin: 5px; border-radius: 5px; cursor: pointer; width: 90%; }
     </style>
 </head>
 <body id="main-body">
 
 <div id="login-box">
-    <h2 style="color:var(--highlight)">🧩 Trio 玩家自由版</h2>
+    <h2 style="color:var(--highlight); margin:0 0 15px 0;">🧩 Trio 回憶三重奏</h2>
     <input type="text" id="userName" placeholder="你的名字">
-    <input type="text" id="roomCode" placeholder="邀請碼">
+    <input type="text" id="roomCode" placeholder="房號 (如: 123)">
     <button class="btn-main" onclick="joinGame()">即刻開局</button>
 </div>
 
-<div id="game-ui" style="display:none; width: 100%; max-width: 400px;">
+<div id="game-ui" style="display:none; width: 100%; max-width: 360px;">
     <div class="score-board" id="score-el"></div>
-    <div id="status" class="status-bar">資料同步中...</div>
+    <div id="status" class="status-bar">同步中...</div>
     <div id="others-area"></div>
     <div id="public-board" class="board"></div>
     <div class="hand-area">
-        <div style="font-size:12px; opacity:0.6; margin-bottom:8px;">我的手牌 (點擊任何卡片即可出牌)</div>
+        <div style="font-size:11px; opacity:0.6; margin-bottom:5px;">我的手牌 (點擊任何卡片)</div>
         <div id="my-hand" class="hand"></div>
     </div>
 </div>
 
 <div id="pick-panel">
-    <p id="pick-msg" style="margin-bottom:15px; font-weight:bold;"></p>
-    <button class="pick-btn" onclick="confirmPick('min')">查看最小的牌 (左端)</button>
-    <button class="pick-btn" onclick="confirmPick('max')">查看最大的牌 (右端)</button>
+    <p id="pick-msg" style="margin-bottom:10px;"></p>
+    <button class="pick-btn" onclick="confirmPick('min')">最小 (左端)</button>
+    <button class="pick-btn" onclick="confirmPick('max')">最大 (右端)</button>
 </div>
 
 <audio id="snd-flip" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
@@ -88,29 +82,23 @@
     async function joinGame() {
         myName = document.getElementById('userName').value.trim() || "玩家";
         rCode = document.getElementById('roomCode').value.trim().toUpperCase() || "GAME";
-        
         const snap = await db.ref('trio/' + rCode + '/playerList').get();
         let list = snap.val() || [];
         myIdx = list.indexOf(myName);
-        if (myIdx === -1) { 
-            myIdx = list.length; list.push(myName); 
-            await db.ref('trio/' + rCode + '/playerList').set(list); 
-        }
-
+        if (myIdx === -1) { myIdx = list.length; list.push(myName); await db.ref('trio/' + rCode + '/playerList').set(list); }
         document.getElementById('login-box').style.display = 'none';
         document.getElementById('game-ui').style.display = 'block';
 
         db.ref('trio/' + rCode).on('value', (s) => {
             game = s.val();
             if (!game) return;
-            if (myIdx === 0 && (!game.players)) {
-                autoInit();
-            } else if (game.players) {
+            if (myIdx === 0 && !game.players) { autoInit(); }
+            else if (game.players) {
                 render();
-                // 電腦思考時間大幅縮短至 1 秒
+                // 電腦思考時間優化：僅在房主手機執行 AI
                 if (game.players[game.turn] && game.players[game.turn].isAI && myIdx === 0 && !game.lock) {
                     db.ref('trio/' + rCode).update({ lock: true });
-                    setTimeout(aiTurn, 1000);
+                    setTimeout(aiTurn, 600); // 縮短電腦反應時間
                 }
             }
         });
@@ -126,51 +114,32 @@
             let hand = cards.splice(0, 9).sort((a,b) => a - b);
             players[i] = { hand: hand, score: 0, name: pList[i], isAI: pList[i].includes("🤖") };
         }
-        db.ref('trio/' + rCode).update({
-            board: cards.map(v => ({v: v, open: false})),
-            players: players, turn: 0, stack: [], count: 3, playerList: pList, lock: false, msg: ""
-        });
+        db.ref('trio/' + rCode).update({ board: cards.map(v => ({v: v, open: false})), players, turn: 0, stack: [], count: 3, playerList: pList, lock: false, msg: "" });
     }
 
     function render() {
         if (!game || !game.players) return;
         const cp = game.players[game.turn] || { name: "..." };
-        
         let sHtml = "";
-        for(let i=0; i<game.count; i++) {
-            const p = game.players[i] || { name: "P"+i, score: 0 };
-            sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${p.name}: ${p.score}</div>`;
-        }
+        for(let i=0; i<game.count; i++) sHtml += `<div class="${game.turn === i ? 'active-turn' : ''}">${game.players[i].name}: ${game.players[i].score}</div>`;
         document.getElementById('score-el').innerHTML = sHtml;
 
         document.getElementById('public-board').innerHTML = (game.board || []).map((c, i) => 
             `<div class="card ${c.open ? 'revealed' : ''}" onclick="pickAction('pub', null, ${i})">${c.open ? c.v : '?'}</div>`
         ).join('');
 
-        // 玩家手牌：移除兩端限制，現在可以點選任何卡片
-        let myHand = (game.players[myIdx] && game.players[myIdx].hand) ? game.players[myIdx].hand : [];
-        document.getElementById('my-hand').innerHTML = myHand.map((v, i) => 
-            v === -1 ? `<div style="width:48px;"></div>` : `<div class="card-hand" onclick="pickAction('my', ${myIdx}, ${i})">${v}</div>`
+        document.getElementById('my-hand').innerHTML = (game.players[myIdx].hand || []).map((v, i) => 
+            v === -1 ? `<div style="width:38px;"></div>` : `<div class="card-hand" onclick="pickAction('my', ${myIdx}, ${i})">${v}</div>`
         ).join('');
 
         let oHtml = "";
         for(let i=0; i<game.count; i++) {
             if(i === myIdx) continue;
-            const p = game.players[i] || { name: "電腦", hand: [] };
-            oHtml += `<div class="hand-area" onclick="openPickPanel(${i})">
-                <div style="font-size:11px; margin-bottom:5px;">${p.name} (得分: ${p.score})</div>
-                <div class="hand">`;
-            
+            const p = game.players[i];
+            oHtml += `<div class="hand-area" onclick="openPickPanel(${i})"><div style="font-size:11px; margin-bottom:5px;">${p.name} (得分: ${p.score})</div><div class="hand">`;
             (p.hand || []).forEach((v, idx) => {
-                let inStack = game.stack && game.stack.find(s => s.owner == i && s.idx == idx);
-                if (v === -1 && !inStack) {
-                    oHtml += `<div style="width:32px;"></div>`;
-                } else if (inStack) {
-                    // 關鍵修正：確保被翻開的手牌一定會顯示數字
-                    oHtml += `<div class="other-card-slot revealed">${inStack.v}</div>`;
-                } else {
-                    oHtml += `<div class="other-card-slot">?</div>`;
-                }
+                let inS = game.stack && game.stack.find(s => s.owner == i && s.idx == idx);
+                oHtml += (v === -1 && !inS) ? `<div style="width:22px;"></div>` : `<div class="other-card-slot ${inS ? 'revealed' : ''}">${inS ? inS.v : '?'}</div>`;
             });
             oHtml += `</div></div>`;
         }
@@ -178,19 +147,13 @@
         document.getElementById('status').innerHTML = (game.turn === myIdx) ? "輪到你了！請翻牌" : `等待 ${cp.name} 行動...<br><small>${game.msg || ''}</small>`;
     }
 
-    function openPickPanel(idx) {
-        if (game.turn !== myIdx || game.lock) return;
-        targetP = idx;
-        const p = game.players[idx] || { name: "對手" };
-        document.getElementById('pick-msg').innerText = `指定 ${p.name} 的牌：`;
-        document.getElementById('pick-panel').style.display = 'block';
-    }
+    function openPickPanel(idx) { if (game.turn !== myIdx || game.lock) return; targetP = idx; document.getElementById('pick-msg').innerText = `指定 ${game.players[idx].name}：`; document.getElementById('pick-panel').style.display = 'block'; }
 
     function confirmPick(mode) {
         document.getElementById('pick-panel').style.display = 'none';
         let h = game.players[targetP].hand;
         let cIdx = (mode === 'min') ? h.findIndex(x => x !== -1) : h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
-        db.ref('trio/' + rCode).update({ msg: `${myName} 查看了 ${game.players[targetP].name} 的牌` });
+        db.ref('trio/' + rCode).update({ msg: `${myName} 看了 ${game.players[targetP].name} 的牌` });
         pickAction('other', targetP, cIdx);
     }
 
@@ -200,42 +163,23 @@
         if (stack.length >= 3) return;
         
         let v, up = {};
-        if (type === 'pub') {
-            if (game.board[cIdx].open) return;
-            v = game.board[cIdx].v; up[`/board/${cIdx}/open`] = true;
-            stack.push({v: v, type: 'pub', idx: cIdx});
-        } else {
-            v = game.players[tIdx].hand[cIdx];
-            if (v === -1 || v === undefined) return;
-            up[`/players/${tIdx}/hand/${cIdx}`] = -1;
-            // 儲存 v 到 stack 中以利 render 顯示
-            stack.push({v: v, type: 'hand', owner: tIdx, idx: cIdx});
-        }
+        if (type === 'pub') { if (game.board[cIdx].open) return; v = game.board[cIdx].v; up[`/board/${cIdx}/open`] = true; stack.push({v, type: 'pub', idx: cIdx}); }
+        else { v = game.players[tIdx].hand[cIdx]; if (v === -1 || v === undefined) return; up[`/players/${tIdx}/hand/${cIdx}`] = -1; stack.push({v, type: 'hand', owner: tIdx, idx: cIdx}); }
         
         up['/stack'] = stack;
         document.getElementById('snd-flip').play().catch(()=>{});
         await db.ref('trio/' + rCode).update(up);
 
-        if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) {
-            db.ref('trio/' + rCode).update({ lock: true });
-            setTimeout(resetTurn, 3000); 
-        } else if (stack.length === 3) {
-            document.getElementById('snd-match').play().catch(()=>{});
-            setTimeout(winSet, 2000);
-        }
+        if (stack.length > 1 && stack[stack.length-1].v !== stack[0].v) { db.ref('trio/' + rCode).update({ lock: true }); setTimeout(resetTurn, 3000); }
+        else if (stack.length === 3) { document.getElementById('snd-match').play().catch(()=>{}); setTimeout(winSet, 1500); }
+        else if (game.players[game.turn].isAI && myIdx === 0) { setTimeout(aiTurn, 800); } // AI 連續翻牌
     }
 
     function resetTurn() {
-        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "不符，已蓋牌", lock: false };
+        let u = { stack: [], turn: (game.turn + 1) % game.count, msg: "數字不符，已蓋牌", lock: false };
         game.board.forEach((c, i) => { u[`/board/${i}/open`] = false; });
         let currentP = JSON.parse(JSON.stringify(game.players));
-        game.stack.forEach(item => {
-            if (item.type === 'hand') {
-                let h = currentP[item.owner].hand;
-                h[item.idx] = item.v;
-                currentP[item.owner].hand = h.filter(x => x !== -1).sort((a,b) => a - b);
-            }
-        });
+        game.stack.forEach(item => { if (item.type === 'hand') { let h = currentP[item.owner].hand; h[item.idx] = item.v; currentP[item.owner].hand = h.filter(x => x !== -1).sort((a,b) => a - b); } });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
     }
@@ -247,23 +191,17 @@
         Object.keys(currentP).forEach(id => { currentP[id].hand = currentP[id].hand.filter(x => x !== -1).sort((a,b) => a - b); });
         u['/players'] = currentP;
         db.ref('trio/' + rCode).update(u);
-        if (game.stack[0].v === 7 || s >= 3) {
-            alert(game.players[game.turn].name + " 獲勝！");
-            db.ref('trio/' + rCode).remove();
-            location.reload();
-        }
+        if (game.stack[0].v === 7 || s >= 3) { alert(game.players[game.turn].name + " 獲勝！"); db.ref('trio/' + rCode).remove(); location.reload(); }
     }
 
     async function aiTurn() {
-        if (!game || !game.players[game.turn]) return;
-        // 電腦 AI 行動
+        if (!game || !game.players[game.turn] || !game.players[game.turn].isAI) return;
         let stack = game.stack || [];
         let type = (stack.length === 0) ? (Math.random() > 0.5 ? 'pub' : 'other') : (Math.random() > 0.3 ? 'pub' : 'other');
         let tIdx = (type === 'pub') ? game.turn : Math.floor(Math.random() * game.count);
         let h = game.players[tIdx].hand;
         let first = h.findIndex(x => x !== -1), last = h.length - 1 - [...h].reverse().findIndex(x => x !== -1);
         let cIdx = (type === 'pub') ? game.board.findIndex(c => !c.open) : (Math.random() > 0.5 ? first : last);
-        if (cIdx === -1 && type === 'pub') { type = 'other'; tIdx = 0; cIdx = game.players[0].hand.findIndex(x=>x!==-1); }
         pickAction(type, tIdx, cIdx);
     }
 </script>
